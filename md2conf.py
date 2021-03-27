@@ -23,6 +23,7 @@ import urllib
 import webbrowser
 import requests
 import markdown
+from PIL import Image
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - \
 %(levelname)s - %(funcName)s [%(lineno)d] - \
@@ -424,7 +425,6 @@ def get_page(title):
 
     return False
 
-
 # Scan for images and upload as attachments if found
 def add_images(page_id, html):
     """
@@ -439,16 +439,24 @@ def add_images(page_id, html):
     for tag in re.findall('<img(.*?)\/>', html):
         rel_path = re.search('src="(.*?)"', tag).group(1)
         alt_text = re.search('alt="(.*?)"', tag).group(1)
+        sizeMatch = re.search('style="zoom:([0-9]+)%;"', tag)
+        size = 0
         abs_path = os.path.join(source_folder, rel_path)
         basename = os.path.basename(rel_path)
         upload_attachment(page_id, abs_path, alt_text)
+        sizeText = ""
         if re.search('http.*', rel_path) is None:
             if CONFLUENCE_API_URL.endswith('/wiki'):
-                html = html.replace('%s' % (rel_path),
-                                    '/wiki/download/attachments/%s/%s' % (page_id, basename))
-            else:
-                html = html.replace('%s' % (rel_path),
-                                    '/download/attachments/%s/%s' % (page_id, basename))
+                if sizeMatch:
+                    size = int(sizeMatch.group(1))
+                    im = Image.open(abs_path)
+                    width, height = im.size
+                    sizeText = 'ac:height="%s" ac:width="%s"' % ( round(height * (size / 100)), round(width * (size / 100)))
+                    acImg='<ac:image ac:title="%s" ac:alt="%s" %s><ri:attachment ri:filename="%s" /></ac:image>' % (alt_text, alt_text, sizeText, basename);
+                    html = html.replace('<img%s/>' % (tag), acImg)
+                else:
+                    html = html.replace('%s' % (rel_path),
+                                        '/download/attachments/%s/%s' % (page_id, basename))
     return html
 
 
